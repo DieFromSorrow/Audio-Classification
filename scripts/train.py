@@ -1,9 +1,10 @@
 import torch
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from torch import nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from models import ECAResTCN, MiniECAResTCN  # 确保models.py在同一目录下
+from models import ECAResTCN, MiniECAResTCN, ECAResNetMfccClassifier, SeparableTr  # 确保models.py在同一目录下
 from datasets import ESC50Dataset
 from torch.utils.data import DataLoader
 
@@ -22,6 +23,10 @@ def train_model(t_loader, v_loader, model, criterion, optimizer, scheduler):
     best_val_loss = np.inf
     epochs_no_improve = 0
     early_stop = False
+
+    # 时间记录
+    t = time.localtime()
+    current_time = time.strftime("%m%d-%H%M", t)
 
     for epoch in range(config["epochs"]):
         if early_stop:
@@ -98,7 +103,7 @@ def train_model(t_loader, v_loader, model, criterion, optimizer, scheduler):
             best_val_loss = val_loss
             epochs_no_improve = 0
             # 保存最佳模型
-            torch.save(model.state_dict(), config["model_save_path"])
+            # torch.save(model.state_dict(), config["model_save_path"] + 'best_model' + current_time + '.pth')
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= config["patience"]:
@@ -126,43 +131,44 @@ def train_model(t_loader, v_loader, model, criterion, optimizer, scheduler):
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig("./training_curves.png")
+    plt.savefig(f"../plots/{current_time}.png")
     plt.show()
 
     return model, history
 
 
 def main():
-    model = ECAResTCN(in_channels=128, num_classes=50).to(device)
+    # model = ECAResNetMfccClassifier(in_channels=128, num_classes=50, layers=[2, 2, 6, 2]).to(device)
+    model = SeparableTr().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(),
                             lr=config["lr"],
                             weight_decay=config["weight_decay"])
     scheduler = CosineAnnealingLR(optimizer, T_max=config["t_max"])
 
-    train_loader = DataLoader(ESC50Dataset(root_dir='../data/ESC-50', mode='train', folds=[1, 2, 3, 4], augment=True),
-                              batch_size=config["batch_size"], shuffle=True, num_workers=4)
+    train_loader = DataLoader(ESC50Dataset(root_dir='../data/ESC-50', mode='train', folds=[1, 2, 3, 4], augment=True,
+                                           out_dim=3),
+                              batch_size=config["batch_size"], shuffle=True, num_workers=8)
 
-    valid_loader = DataLoader(ESC50Dataset(root_dir='../data/ESC-50', mode='valid', folds=[5], augment=False),
-                              batch_size=config["batch_size"], shuffle=False, num_workers=4)
+    valid_loader = DataLoader(ESC50Dataset(root_dir='../data/ESC-50', mode='valid', folds=[5], augment=False,
+                                           out_dim=3),
+                              batch_size=config["batch_size"], shuffle=False, num_workers=8)
 
     # 开始训练
     train_model(train_loader, valid_loader, model, criterion, optimizer, scheduler)
 
 
-
-# 使用示例（需自行准备DataLoader）
 if __name__ == "__main__":
-    device = torch.device("mps")
+    device = torch.device("cuda")
 
     config = {
         "lr": 1e-3,
         "weight_decay": 0,
-        "batch_size": 64,
+        "batch_size": 4,
         "epochs": 200,
         "t_max": 50,  # CosineAnnealing参数
-        "patience": 15,  # 早停耐心值
-        "model_save_path": "../saved_weights/best_model.pth"
+        "patience": 30,  # 早停耐心值
+        "model_save_path": "../saved_weights/"
     }
 
     main()

@@ -20,13 +20,13 @@ class ECAResTCN(nn.Module):
         # 使用更高效的残差块结构
         self.res_layers = nn.Sequential(
             make_layer(ECAResTCNBlock1d, 64, 64, layers[0],
-                       dilation[0], stride=1, dropout=dropout),
+                       dilation=dilation[0], stride=1, dropout=dropout),
             make_layer(ECAResTCNBlock1d, 64, 128, layers[1],
-                       dilation[1], stride=2, dropout=dropout),
+                       dilation=dilation[1], stride=2, dropout=dropout),
             make_layer(ECAResTCNBlock1d, 128, 256, layers[2],
-                       dilation[2], stride=2, dropout=dropout),
+                       dilation=dilation[2], stride=2, dropout=dropout),
             make_layer(ECAResTCNBlock1d, 256, 512, layers[3],
-                       dilation[3], stride=2, dropout=dropout)
+                       dilation=dilation[3], stride=2, dropout=dropout)
         )
 
         # 时间注意力模块

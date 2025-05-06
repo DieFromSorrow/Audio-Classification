@@ -21,6 +21,33 @@ class ECALayer(nn.Module):
         return x * y.expand_as(x)
 
 
+class ECAResidualBlock1d(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, dropout=0):
+        super(ECAResidualBlock1d, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.elu = nn.ELU()
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+        self.eca = ECALayer(out_channels)  # 添加通道注意力
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm1d(out_channels)
+            )
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = self.elu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.eca(out)  # 应用通道注意力
+        out += self.shortcut(x)
+        return self.dropout(self.elu(out))
+
+
 class ECAResTCNBlock1d(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, dilation=1, dropout=0):
         super(ECAResTCNBlock1d, self).__init__()
@@ -50,11 +77,11 @@ class ECAResTCNBlock1d(nn.Module):
         return self.dropout(self.elu(out))
 
 
-def make_layer(block_class, in_channels, out_channels, blocks, dilation, stride, dropout=0):
-    layers = [block_class(in_channels, out_channels, stride, dilation, dropout=dropout)]
+def make_layer(block_class, in_channels, out_channels, blocks, stride, dropout=0., **kwargs):
+    layers = [block_class(in_channels, out_channels, stride, dropout=dropout, **kwargs)]
     for _ in range(1, blocks):
         layers.append(block_class(out_channels, out_channels, stride=1,
-                                  dilation=dilation, dropout=dropout))
+                                  dropout=dropout, **kwargs))
     return nn.Sequential(*layers)
 
 
@@ -84,8 +111,8 @@ class SelfAttentionPool(nn.Module):
 
     def forward(self, x):
         # x: (seq_len, batch_size, embed_dim)
-        x, _ = self.self_attn(x, x, x)
         query = self.linear_query(x.mean(dim=0, keepdim=True))
+        x, _ = self.self_attn(x, x, x)
         x, _ = self.query_attn(query, x, x)
         x = x.squeeze(0)
         # x: (batch_size, embed_dim)

@@ -8,7 +8,7 @@ import random
 
 
 class ESC50Dataset(Dataset):
-    def __init__(self, root_dir, folds, mode='train', target_length=216, augment=True):
+    def __init__(self, root_dir, folds, mode='train', target_length=216, augment=True, out_dim=2):
         """
         ESC-50 Dataset类
 
@@ -25,6 +25,7 @@ class ESC50Dataset(Dataset):
         self.target_length = target_length
         self.augment = augment
         self.sr = 22050  # 目标采样率
+        self.out_dim = out_dim
 
         # 加载并过滤元数据
         self.metadata = pd.read_csv(os.path.join(root_dir, 'meta', 'esc50.csv'))
@@ -63,8 +64,6 @@ class ESC50Dataset(Dataset):
         mel_spec = self._create_mel_spectrogram(waveform)
         mel_spec = self._postprocess_spectrogram(mel_spec)
 
-        # mel_spec = (mel_spec - mel_spec.mean()) / mel_spec.std()
-
         return mel_spec, self.labels[idx]
 
     def _preprocess_audio(self, waveform, orig_sr):
@@ -101,7 +100,9 @@ class ESC50Dataset(Dataset):
 
         # 标准化
         spec = (spec - spec.mean()) / (spec.std() + 1e-9)
-        return spec.squeeze(0)  # 移除通道维度
+        if self.out_dim == 2:
+            spec = spec.squeeze(0)
+        return spec
 
     def _audio_augmentation(self, waveform):
         """音频时域增强"""
